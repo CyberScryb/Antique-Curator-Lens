@@ -1,9 +1,12 @@
 
 // A procedural sound synthesizer for "Tactile" UI feedback
+type SoundListener = (isMuted: boolean) => void;
+
 export class SoundService {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private isMuted: boolean = false;
+  private listeners: Set<SoundListener> = new Set();
 
   constructor() {
     // Lazy init to handle browser autoplay policies
@@ -17,14 +20,29 @@ export class SoundService {
     this.ctx = new AudioCtx();
     this.masterGain = this.ctx.createGain();
     this.masterGain.connect(this.ctx.destination);
-    this.masterGain.gain.value = 0.3; // Default volume
+    this.masterGain.gain.value = this.isMuted ? 0 : 0.3; // Default volume
+  }
+
+  subscribe(listener: SoundListener) {
+    this.listeners.add(listener);
+    listener(this.isMuted);
+    return () => this.listeners.delete(listener);
+  }
+
+  notifyListeners() {
+    this.listeners.forEach(listener => listener(this.isMuted));
   }
 
   toggleMute() {
     this.isMuted = !this.isMuted;
-    if (this.masterGain) {
-      this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.3, this.ctx!.currentTime, 0.1);
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.3, this.ctx.currentTime, 0.1);
     }
+    this.notifyListeners();
+    return this.isMuted;
+  }
+
+  getMutedState() {
     return this.isMuted;
   }
 

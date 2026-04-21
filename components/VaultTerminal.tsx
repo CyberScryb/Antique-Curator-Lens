@@ -18,6 +18,10 @@ interface FilterState {
     minCondition: number;
     eras: string[];
     origins: string[];
+    categories: string[];
+    sellers: string[];
+    minValue: string;
+    maxValue: string;
 }
 
 export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onDelete, onSelect, onAddItem }) => {
@@ -31,7 +35,11 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
   const [filters, setFilters] = useState<FilterState>({
       minCondition: 0,
       eras: [],
-      origins: []
+      origins: [],
+      categories: [],
+      sellers: [],
+      minValue: '',
+      maxValue: ''
   });
 
   const totalValue = items.reduce((sum, item) => sum + item.valuation.mid, 0);
@@ -39,15 +47,30 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
   // Derived Options for Filters
   const availableEras = useMemo(() => Array.from(new Set(items.map(i => i.era))).filter(Boolean).sort(), [items]);
   const availableOrigins = useMemo(() => Array.from(new Set(items.map(i => i.origin))).filter(Boolean).sort(), [items]);
+  const availableCategories = useMemo(() => Array.from(new Set(items.map(i => i.category || i.classification))).filter(Boolean).sort(), [items]);
+  const availableSellers = useMemo(() => Array.from(new Set(items.map(i => i.seller))).filter(Boolean).sort(), [items]);
 
-  const activeFilterCount = (filters.minCondition > 0 ? 1 : 0) + filters.eras.length + filters.origins.length;
+  const activeFilterCount = (filters.minCondition > 0 ? 1 : 0) + 
+                            filters.eras.length + 
+                            filters.origins.length + 
+                            filters.categories.length + 
+                            filters.sellers.length + 
+                            (filters.minValue !== '' ? 1 : 0) + 
+                            (filters.maxValue !== '' ? 1 : 0);
 
   // Sorting & Filtering Logic
   const filteredAndSortedItems = useMemo(() => {
       let res = items.filter(i => {
           // 1. Search Term
-          const matchesSearch = i.itemName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                i.classification.toLowerCase().includes(searchTerm.toLowerCase());
+          const searchLower = searchTerm.toLowerCase();
+          const matchesSearch = !searchTerm || 
+                                i.itemName.toLowerCase().includes(searchLower) || 
+                                i.classification.toLowerCase().includes(searchLower) ||
+                                (i.category && i.category.toLowerCase().includes(searchLower)) ||
+                                (i.era && i.era.toLowerCase().includes(searchLower)) ||
+                                (i.materials && i.materials.toLowerCase().includes(searchLower)) ||
+                                (i.seller && i.seller.toLowerCase().includes(searchLower)) ||
+                                i.valuation.mid.toString().includes(searchLower);
           
           // 2. Condition Filter
           const matchesCondition = i.conditionScore >= filters.minCondition;
@@ -58,7 +81,19 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
           // 4. Origin Filter
           const matchesOrigin = filters.origins.length === 0 || filters.origins.includes(i.origin);
 
-          return matchesSearch && matchesCondition && matchesEra && matchesOrigin;
+          // 5. Category Filter
+          const itemCat = i.category || i.classification;
+          const matchesCategory = filters.categories.length === 0 || filters.categories.includes(itemCat);
+
+          // 6. Seller Filter
+          const matchesSeller = filters.sellers.length === 0 || (i.seller && filters.sellers.includes(i.seller));
+
+          // 7. Value Filter
+          const minV = filters.minValue === '' ? 0 : parseFloat(filters.minValue);
+          const maxV = filters.maxValue === '' ? Infinity : parseFloat(filters.maxValue);
+          const matchesValue = i.valuation.mid >= minV && i.valuation.mid <= maxV;
+
+          return matchesSearch && matchesCondition && matchesEra && matchesOrigin && matchesCategory && matchesSeller && matchesValue;
       });
 
       return res.sort((a, b) => {
@@ -77,7 +112,7 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
       setShowSortMenu(false);
   };
 
-  const toggleFilter = (type: 'eras' | 'origins', value: string) => {
+  const toggleFilter = (type: 'eras' | 'origins' | 'categories' | 'sellers', value: string) => {
       soundManager.playClick();
       setFilters(prev => {
           const list = prev[type];
@@ -88,6 +123,10 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
       });
   };
 
+  const handleValueFilterChange = (field: 'minValue' | 'maxValue', value: string) => {
+      setFilters(prev => ({ ...prev, [field]: value }));
+  };
+
   const setConditionFilter = (score: number) => {
       soundManager.playClick();
       setFilters(prev => ({ ...prev, minCondition: prev.minCondition === score ? 0 : score }));
@@ -95,7 +134,7 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
 
   const clearFilters = () => {
       soundManager.playClick();
-      setFilters({ minCondition: 0, eras: [], origins: [] });
+      setFilters({ minCondition: 0, eras: [], origins: [], categories: [], sellers: [], minValue: '', maxValue: '' });
       toast.info("Filters Cleared");
   };
 
@@ -118,184 +157,180 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
     <div className="h-full flex flex-col bg-black font-sans relative">
       
       {/* 1. Secure Header */}
-      <div className="bg-black/90 backdrop-blur-md p-6 pt-[calc(20px+env(safe-area-inset-top))] border-b border-zinc-800 sticky top-0 z-20 shadow-lg">
-        <div className="flex justify-between items-start mb-6">
+      <div className="bg-black/95 backdrop-blur-3xl p-6 pt-[calc(20px+env(safe-area-inset-top))] border-b border-white/5 sticky top-0 z-20">
+        <div className="flex justify-between items-start mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-                <Lock size={12} className="text-emerald-500" />
-                <span className="text-[10px] font-mono text-emerald-500 uppercase tracking-widest">SECURE_VAULT_V4</span>
+            <div className="flex items-center gap-2 mb-2 opacity-40">
+                <Lock size={10} className="text-emerald-500" />
+                <span className="text-[9px] font-mono text-white uppercase tracking-[0.3em]">Vault_Active</span>
             </div>
-            <h1 className="text-3xl font-display text-white tracking-wide">DATABASE</h1>
+            <h1 className="text-4xl font-display text-white tracking-widest uppercase">Vault</h1>
           </div>
           
-          <div className="text-right flex flex-col items-end gap-2">
-               {/* Prominent Manual Add Button */}
+          <div className="text-right flex flex-col items-end gap-3">
                <button 
                   onClick={onAddItem}
-                  className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-sm hover:bg-zinc-200 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.2)] group"
+                  className="px-5 py-2.5 bg-white text-black text-[10px] font-bold uppercase tracking-[0.2em] rounded-full hover:bg-zinc-200 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.1)] active:scale-95"
                >
-                   <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-                   <span className="text-xs font-bold uppercase tracking-widest">New Asset</span>
+                   + Add Item
                </button>
-               <div className="flex items-center gap-2 text-zinc-500 mt-1">
-                 <span className="text-[10px] uppercase tracking-widest">Total Valuation</span>
-                 <span className="font-display text-lg text-white tracking-tight leading-none">${totalValue.toLocaleString()}</span>
+               <div className="flex flex-col items-end">
+                 <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 mb-1">Portfolio_Value</span>
+                 <span className="font-display text-2xl text-emerald-400 tracking-tight leading-none">${totalValue.toLocaleString()}</span>
                </div>
           </div>
         </div>
         
         {/* Controls */}
-        <div className="flex gap-3">
-          {/* Search Bar */}
-          <div className="relative flex-1 group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-white transition-colors" size={14} />
-            <input 
-              type="text" 
-              placeholder="SEARCH ASSET ID..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-zinc-900 border border-zinc-800 text-sm text-white focus:border-blue-500 focus:bg-zinc-900 outline-none placeholder:text-zinc-700 transition-all font-mono uppercase rounded-sm"
-            />
+        <div className="flex flex-col gap-4 mt-2">
+          {/* Top Row: Search & View Toggle */}
+          <div className="flex gap-4">
+            <div className="relative flex-1 group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-white transition-colors" size={13} />
+              <input 
+                type="text" 
+                placeholder="Search collection..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 bg-zinc-900/40 border border-white/5 text-xs text-white focus:border-white/20 focus:bg-zinc-900/60 outline-none placeholder:text-zinc-700 transition-all font-sans rounded-2xl"
+              />
+            </div>
+            
+            <div className="flex bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden p-1">
+                <button 
+                  onClick={() => { setViewMode('list'); soundManager.playClick(); }}
+                  className={`w-10 h-full flex items-center justify-center transition-all rounded-xl ${viewMode === 'list' ? 'bg-white text-black shadow-lg shadow-white/5' : 'text-zinc-600 hover:text-white'}`}
+                >
+                    <List size={14} />
+                </button>
+                <button 
+                  onClick={() => { setViewMode('grid'); soundManager.playClick(); }}
+                  className={`w-10 h-full flex items-center justify-center transition-all rounded-xl ${viewMode === 'grid' ? 'bg-white text-black shadow-lg shadow-white/5' : 'text-zinc-600 hover:text-white'}`}
+                >
+                    <Grip size={14} />
+                </button>
+            </div>
           </div>
 
-          {/* Filter Button */}
-          <div className="relative">
+          {/* Bottom Row: Sort Chips & Filter Toggle */}
+          <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-hide">
+              {/* Sort Controls */}
+              <div className="flex items-center bg-zinc-900/60 border border-white/5 rounded-full p-1 shrink-0">
+                 <button onClick={() => handleSortChange('RECENT')} className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${sortBy === 'RECENT' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}>Date</button>
+                 <button onClick={() => handleSortChange('ALPHA')} className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${sortBy === 'ALPHA' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}>Name</button>
+                 <button onClick={() => handleSortChange('VALUE_HIGH')} className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${sortBy === 'VALUE_HIGH' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}>Value</button>
+              </div>
+
+              <div className="w-px h-6 bg-white/10 shrink-0 mx-1"></div>
+
+              {/* Advanced Filter Toggle */}
               <button 
-                  onClick={() => { setShowFilterMenu(!showFilterMenu); setShowSortMenu(false); soundManager.playClick(); }}
-                  className={`h-full px-3 border flex items-center gap-2 transition-all rounded-sm relative ${showFilterMenu || activeFilterCount > 0 ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'}`}
+                  onClick={() => { setShowFilterMenu(!showFilterMenu); soundManager.playClick(); }}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all shrink-0 ${showFilterMenu || activeFilterCount > 0 ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'bg-transparent border-white/10 text-zinc-400 hover:border-white/30 hover:text-white'}`}
               >
-                  <Filter size={16} />
-                  {activeFilterCount > 0 && (
-                      <span className="absolute -top-2 -right-2 w-4 h-4 bg-white text-blue-600 text-[9px] font-bold flex items-center justify-center rounded-full shadow-lg">
-                          {activeFilterCount}
-                      </span>
-                  )}
+                  <Filter size={12} />
+                  Filters {activeFilterCount > 0 && <span className="bg-emerald-500 text-black px-1.5 py-0.5 rounded-full text-[8px] leading-none">{activeFilterCount}</span>}
               </button>
 
-              {/* Filter Panel */}
-              {showFilterMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-72 bg-zinc-900 border border-zinc-700 shadow-2xl z-50 rounded-sm overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800">
-                          <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Advanced Filters</span>
-                          <button onClick={clearFilters} className="text-[9px] text-zinc-500 hover:text-white uppercase tracking-wider flex items-center gap-1">
-                              <X size={10} /> Clear
-                          </button>
-                      </div>
-
-                      <div className="max-h-[60vh] overflow-y-auto p-4 space-y-5">
-                          {/* Condition Filter */}
-                          <div>
-                              <div className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-2">Min. Condition</div>
-                              <div className="grid grid-cols-4 gap-2">
-                                  {[
-                                      { label: 'All', score: 0 },
-                                      { label: 'Fair+', score: 4 },
-                                      { label: 'Good+', score: 7 },
-                                      { label: 'Mint', score: 9 }
-                                  ].map((opt) => (
-                                      <button 
-                                          key={opt.score}
-                                          onClick={() => setConditionFilter(opt.score)}
-                                          className={`py-1.5 text-[9px] uppercase font-bold border rounded-sm transition-colors ${filters.minCondition === opt.score ? 'bg-white text-black border-white' : 'bg-black text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}
-                                      >
-                                          {opt.label}
-                                      </button>
-                                  ))}
-                              </div>
-                          </div>
-
-                          {/* Era Filter */}
-                          {availableEras.length > 0 && (
-                              <div>
-                                  <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest mb-2">Historical Era</div>
-                                  <div className="flex flex-wrap gap-2">
-                                      {availableEras.map(era => (
-                                          <button
-                                              key={era}
-                                              onClick={() => toggleFilter('eras', era)}
-                                              className={`px-2 py-1 text-[9px] border rounded-sm transition-all flex items-center gap-1 ${filters.eras.includes(era) ? 'bg-amber-900/30 border-amber-500 text-amber-100' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}
-                                          >
-                                              {era} {filters.eras.includes(era) && <Check size={8} />}
-                                          </button>
-                                      ))}
-                                  </div>
-                              </div>
-                          )}
-
-                          {/* Origin Filter */}
-                          {availableOrigins.length > 0 && (
-                              <div>
-                                  <div className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest mb-2">Origin / Maker</div>
-                                  <div className="flex flex-wrap gap-2">
-                                      {availableOrigins.map(origin => (
-                                          <button
-                                              key={origin}
-                                              onClick={() => toggleFilter('origins', origin)}
-                                              className={`px-2 py-1 text-[9px] border rounded-sm transition-all flex items-center gap-1 ${filters.origins.includes(origin) ? 'bg-emerald-900/30 border-emerald-500 text-emerald-100' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}
-                                          >
-                                              {origin} {filters.origins.includes(origin) && <Check size={8} />}
-                                          </button>
-                                      ))}
-                                  </div>
-                              </div>
-                          )}
-                      </div>
-                  </div>
+              {activeFilterCount > 0 && (
+                  <button onClick={clearFilters} className="text-[9px] text-zinc-500 hover:text-red-400 uppercase tracking-widest font-bold whitespace-nowrap px-2">
+                       Clear
+                  </button>
               )}
           </div>
 
-          {/* Sort Button */}
-          <div className="relative">
-              <button 
-                  onClick={() => { setShowSortMenu(!showSortMenu); setShowFilterMenu(false); soundManager.playClick(); }}
-                  className={`h-full px-3 border border-zinc-800 flex items-center gap-2 transition-colors rounded-sm ${showSortMenu ? 'bg-zinc-800 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-white'}`}
-              >
-                  <SlidersHorizontal size={16} />
-              </button>
-              
-              {/* Sort Dropdown */}
-              {showSortMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-zinc-700 shadow-xl z-50 rounded-sm overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="px-3 py-2 text-[9px] font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-800">Sort Assets By</div>
-                      <button onClick={() => handleSortChange('RECENT')} className={`w-full text-left px-4 py-3 text-xs flex items-center gap-2 hover:bg-zinc-800 ${sortBy === 'RECENT' ? 'text-blue-400' : 'text-zinc-300'}`}>
-                          <Clock size={14} /> Recent
-                      </button>
-                      <button onClick={() => handleSortChange('VALUE_HIGH')} className={`w-full text-left px-4 py-3 text-xs flex items-center gap-2 hover:bg-zinc-800 ${sortBy === 'VALUE_HIGH' ? 'text-blue-400' : 'text-zinc-300'}`}>
-                          <ArrowDownWideNarrow size={14} /> Value (High)
-                      </button>
-                      <button onClick={() => handleSortChange('VALUE_LOW')} className={`w-full text-left px-4 py-3 text-xs flex items-center gap-2 hover:bg-zinc-800 ${sortBy === 'VALUE_LOW' ? 'text-blue-400' : 'text-zinc-300'}`}>
-                          <ArrowUpNarrowWide size={14} /> Value (Low)
-                      </button>
-                      <button onClick={() => handleSortChange('ALPHA')} className={`w-full text-left px-4 py-3 text-xs flex items-center gap-2 hover:bg-zinc-800 ${sortBy === 'ALPHA' ? 'text-blue-400' : 'text-zinc-300'}`}>
-                          <ALargeSmall size={14} /> Name (A-Z)
-                      </button>
-                  </div>
-              )}
-          </div>
+          {/* Expanded Inline Filter Drawer */}
+          {showFilterMenu && (
+             <div className="bg-zinc-900/60 border border-white/10 rounded-2xl p-5 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-bold text-white uppercase tracking-widest">Advanced Filtering</span>
+                    <button onClick={() => setShowFilterMenu(false)} className="text-zinc-500 hover:text-white"><X size={14}/></button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[50vh] overflow-y-auto pr-2">
+                    
+                    {/* Condition Level */}
+                    <div>
+                        <div className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-3">Minimum Condition (1-10)</div>
+                        <div className="grid grid-cols-4 gap-2">
+                            {[
+                                { label: 'All', score: 0 },
+                                { label: 'Fair (4+)', score: 4 },
+                                { label: 'Good (7+)', score: 7 },
+                                { label: 'Mint (9+)', score: 9 }
+                            ].map((opt) => (
+                                <button 
+                                    key={opt.score}
+                                    onClick={() => setConditionFilter(opt.score)}
+                                    className={`py-2 text-[9px] uppercase font-bold border rounded-lg transition-colors ${filters.minCondition === opt.score ? 'bg-blue-500 text-black border-blue-500' : 'bg-black/50 text-zinc-400 border-white/10 hover:border-white/30 hover:text-white'}`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-          {/* View Toggle */}
-          <div className="flex bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden">
-              <button 
-                onClick={() => { setViewMode('list'); soundManager.playClick(); }}
-                className={`p-3 transition-colors ${viewMode === 'list' ? 'bg-white text-black' : 'text-zinc-600 hover:text-white'}`}
-              >
-                  <List size={18} />
-              </button>
-              <div className="w-px bg-zinc-800"></div>
-              <button 
-                onClick={() => { setViewMode('grid'); soundManager.playClick(); }}
-                className={`p-3 transition-colors ${viewMode === 'grid' ? 'bg-white text-black' : 'text-zinc-600 hover:text-white'}`}
-              >
-                  <Grip size={18} />
-              </button>
-          </div>
-        </div>
-        
-        {/* Active Sort Label */}
-        <div className="mt-4 flex items-center gap-2">
-            <div className="h-px bg-zinc-800 flex-1"></div>
-            <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Sorted By: {getSortLabel()}</span>
-            <div className="h-px bg-zinc-800 flex-1"></div>
+                    {/* Era Filter */}
+                    {availableEras.length > 0 && (
+                        <div>
+                            <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest mb-3">Historical Era</div>
+                            <div className="flex flex-wrap gap-2">
+                                {availableEras.map(era => (
+                                    <button
+                                        key={era}
+                                        onClick={() => toggleFilter('eras', era)}
+                                        className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold border rounded-full transition-all flex items-center gap-1.5 ${filters.eras.includes(era) ? 'bg-amber-500/20 border-amber-500 text-amber-300' : 'bg-black/50 border-white/10 text-zinc-400 hover:border-white/30'}`}
+                                    >
+                                        {era} {filters.eras.includes(era) && <Check size={10} />}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Origin Filter */}
+                    {availableOrigins.length > 0 && (
+                        <div>
+                            <div className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest mb-3">Origin / Maker</div>
+                            <div className="flex flex-wrap gap-2">
+                                {availableOrigins.map(origin => (
+                                    <button
+                                        key={origin}
+                                        onClick={() => toggleFilter('origins', origin)}
+                                        className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold border rounded-full transition-all flex items-center gap-1.5 ${filters.origins.includes(origin) ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300' : 'bg-black/50 border-white/10 text-zinc-400 hover:border-white/30'}`}
+                                    >
+                                        {origin} {filters.origins.includes(origin) && <Check size={10} />}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Valuation Filter */}
+                    <div>
+                        <div className="text-[9px] font-bold text-purple-500 uppercase tracking-widest mb-3">Valuation Range ($)</div>
+                        <div className="flex items-center gap-3">
+                            <input 
+                                type="number" 
+                                placeholder="Min" 
+                                value={filters.minValue}
+                                onChange={(e) => handleValueFilterChange('minValue', e.target.value)}
+                                className="w-full bg-black border border-white/10 text-white text-xs px-3 py-2 rounded-lg focus:border-purple-500 outline-none placeholder:text-zinc-700"
+                            />
+                            <span className="text-zinc-600">-</span>
+                            <input 
+                                type="number" 
+                                placeholder="Max" 
+                                value={filters.maxValue}
+                                onChange={(e) => handleValueFilterChange('maxValue', e.target.value)}
+                                className="w-full bg-black border border-white/10 text-white text-xs px-3 py-2 rounded-lg focus:border-purple-500 outline-none placeholder:text-zinc-700"
+                            />
+                        </div>
+                    </div>
+
+                </div>
+             </div>
+          )}
         </div>
       </div>
 
@@ -327,65 +362,46 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ items, onD
               <div 
                 key={item.id} 
                 onClick={() => { soundManager.playClick(); onSelect(item); }}
-                className={`group bg-zinc-950 border border-zinc-800 hover:border-blue-500/50 cursor-pointer transition-all duration-300 overflow-hidden relative shadow-lg
-                    ${viewMode === 'list' ? 'flex h-32 rounded-sm' : 'flex flex-col rounded-sm'}
+                className={`group bg-zinc-950/40 border border-white/5 hover:border-white/20 cursor-pointer transition-all duration-500 overflow-hidden relative
+                    ${viewMode === 'list' ? 'flex h-28 rounded-3xl' : 'flex flex-col rounded-3xl'}
                 `}
               >
-                {/* Image Section */}
-                <div className={`${viewMode === 'list' ? 'w-32 h-full' : 'h-40 w-full'} relative bg-zinc-900 shrink-0 overflow-hidden`}>
-                  <img src={item.imageUrl} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-500 grayscale group-hover:grayscale-0 group-hover:scale-110" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent opacity-60"></div>
+                {/* Image Section with hover zoom */}
+                <div className={`${viewMode === 'list' ? 'w-28 h-full' : 'h-44 w-full'} relative shrink-0 overflow-hidden`}>
+                  <img src={item.imageUrl} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700 ease-out" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60"></div>
                   
-                  {/* Item Count Badge */}
-                  {(item.images?.length || 0) > 1 && (
-                      <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/60 backdrop-blur border border-white/10 text-[8px] font-bold text-white flex items-center gap-1 rounded-sm">
-                          <Database size={8} /> {item.images?.length}
-                      </div>
-                  )}
-
-                  {/* Category Tag */}
-                  <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-blue-600/20 backdrop-blur border border-blue-500/30 text-[8px] font-bold text-blue-200 uppercase tracking-wider rounded-sm">
+                  {/* Category Tag - Minimal */}
+                  <div className="absolute top-3 left-3 px-2 py-0.5 bg-black/40 backdrop-blur-md border border-white/10 text-[7px] font-bold text-zinc-300 uppercase tracking-[0.2em] rounded-full">
                       {item.classification}
                   </div>
                 </div>
-
+ 
                 {/* Data Section */}
-                <div className="p-4 flex-1 flex flex-col justify-between relative overflow-hidden">
-                   
+                <div className="p-4 flex-1 flex flex-col justify-between relative">
                    <div>
-                       <div className="flex justify-between items-start">
-                           <h3 className={`font-display text-white leading-tight mb-1 group-hover:text-blue-400 transition-colors ${viewMode === 'list' ? 'text-lg' : 'text-sm line-clamp-2'}`}>
-                               {item.itemName}
-                           </h3>
-                       </div>
-                       <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wide truncate mb-2">
+                       <h3 className={`font-sans font-medium text-white leading-tight mb-1 group-hover:text-emerald-400 transition-colors ${viewMode === 'list' ? 'text-lg' : 'text-sm line-clamp-1'}`}>
+                           {item.itemName}
+                       </h3>
+                       <p className="text-[9px] text-zinc-600 font-mono uppercase tracking-[0.15em]">
                            {item.era} // {item.origin}
                        </p>
-                       
-                       {/* Trust Tier Indicator (Enhanced) */}
-                       <div className="flex items-center gap-1.5 mt-1">
-                           <div className={`p-1 rounded-full ${Badge.bg}`}>
-                               <Badge.icon size={10} className={Badge.color} />
-                           </div>
-                           <span className={`text-[8px] uppercase tracking-widest font-bold ${Badge.color}`}>{item.provenance.trustTier.split(' ')[0]} {item.provenance.trustTier.split(' ')[1]}</span>
-                       </div>
                    </div>
                    
-                   <div className="flex items-end justify-between mt-3">
+                   <div className="flex items-end justify-between">
                        <div>
-                           <span className="text-[8px] text-zinc-600 uppercase block">Est. Market Value</span>
-                           <p className="font-display text-emerald-500 text-lg shadow-emerald-500/20 drop-shadow-sm">${item.valuation.mid.toLocaleString()}</p>
+                           <p className="font-display text-emerald-500 text-lg">${item.valuation.mid.toLocaleString()}</p>
                        </div>
                        
-                       <div className="flex gap-2 relative z-10">
+                       <div className="flex gap-1.5 translate-y-1 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
                            <button 
                              onClick={(e) => { e.stopPropagation(); onDelete(item.id); soundManager.playClick(); }} 
-                             className="p-2 rounded-sm hover:bg-red-950/50 text-zinc-600 hover:text-red-500 border border-transparent hover:border-red-900 transition-all"
+                             className="w-8 h-8 rounded-full flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
                            >
-                               <Trash2 size={14} />
+                               <Trash2 size={12} />
                            </button>
-                           <button className="p-2 rounded-sm bg-zinc-800 hover:bg-white text-zinc-400 hover:text-black transition-colors">
-                               <ArrowRight size={14} />
+                           <button className="w-8 h-8 rounded-full flex items-center justify-center bg-white/5 text-zinc-300 hover:bg-white hover:text-black transition-all">
+                               <ArrowRight size={12} />
                            </button>
                        </div>
                    </div>

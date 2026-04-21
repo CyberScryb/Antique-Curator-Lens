@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Catch-all Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isUnverified() { return isSignedIn() && request.auth.token.email_verified == false; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isValidId(id) { 
+        return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    // Validation Blueprint: User
+    function isValidUser(data) {
+        return data.keys().hasAll(['uid', 'email']) 
+            && data.uid is string && data.uid.size() <= 128
+            && data.email is string && data.email.size() <= 256
+            && (data.get('displayName', '') is string)
+            && (data.get('photoURL', '') is string)
+            && data.uid == request.auth.uid;
+    }
+
+    // Validation Blueprint: CollectionItem
+    function isValidCollectionItem(data) {
+        let requiredKeys = ['id', 'userId', 'itemName', 'category', 'classification', 'era', 'origin', 'condition', 'conditionScore', 'valuation', 'authenticationMarks', 'historicalContext', 'materials', 'careInstructions', 'comparableSales', 'sellingProfile', 'confidence'];
+        return data.keys().hasAll(requiredKeys)
+            && data.id is string && data.id.size() <= 128
+            && data.userId is string && data.userId.size() <= 128
+            && data.itemName is string && data.itemName.size() <= 500
+            && data.conditionScore is number
+            && data.confidence is number
+            && (data.get('restoration', null) == null || (
+                data.restoration is map
+                && (data.restoration.get('restorationPotential', '') is string)
+                && (data.restoration.get('estimatedCost', 0) is number || data.restoration.get('estimatedCost', '') is string)
+                && (data.restoration.get('recommendedActions', []) is list)
+                && (data.restoration.get('perfectStateDescription', '') is string)
+            ))
+            && data.userId == request.auth.uid;
+    }
+
+    // --- RULES ---
+
+    // 1. Users Collection
+    match /users/{userId} {
+        allow get: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidUser(incoming());
+        allow update: if isOwner(userId) && isValidUser(incoming()) 
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']);
+    }
+
+    // 2. Items Collection
+    match /items/{itemId} {
+        allow get: if isSignedIn() && existing().userId == request.auth.uid;
+        allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+        
+        allow create: if isSignedIn() 
+                      && isValidId(itemId)
+                      && isValidCollectionItem(incoming())
+                      && incoming().id == itemId
+                      && incoming().userId == request.auth.uid;
+                      
+        allow update: if isSignedIn()
+                      && existing().userId == request.auth.uid
+                      && isValidCollectionItem(incoming())
+                      && incoming().userId == existing().userId
+                      && incoming().id == existing().id;
+                      
+        allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+  }
+}

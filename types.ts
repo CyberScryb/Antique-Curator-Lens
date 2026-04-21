@@ -26,6 +26,7 @@ export interface AppraisalResult {
     currency: string;
   };
   authenticationMarks: string[]; 
+  keyFeatures?: string[];
   visualHotspots: VisualHotspot[]; 
   historicalContext: string; 
   materials: string;
@@ -52,7 +53,8 @@ export interface AppraisalResult {
   };
   restoration: {
     restorationPotential: string;
-    estimatedCost: string;
+    estimatedCost: number;
+    recommendedActions: string[];
     perfectStateDescription: string;
   };
   provenance: {
@@ -68,13 +70,15 @@ export interface AppraisalResult {
 
 export interface CollectionItem extends AppraisalResult {
   id: string;
+  userId: string; // Added for ownership
   dateScanned: string;
   imageUrl: string; // Primary thumbnail
   images?: string[]; // Full evidence set
   userNotes?: string;
+  seller?: string; // Added seller field
 }
 
-export type LensMode = 'IDENTITY' | 'MARKET' | 'FORENSICS' | 'DECIPHER';
+export type LensMode = 'IDENTITY' | 'MARKET' | 'FORENSICS' | 'DECIPHER' | 'RESTORE';
 
 export interface LiveAnalysisUpdate {
   status: 'SEARCHING' | 'IDENTIFYING' | 'LOCKED';
@@ -86,6 +90,7 @@ export interface LiveAnalysisUpdate {
   confidence: number;
   lensMode: LensMode;
   coordinates?: { x: number, y: number }; 
+  hotspotDetected?: boolean;
 }
 
 export interface MarketAnalysis {
@@ -104,4 +109,18 @@ export interface ChatMessage {
   text: string;
 }
 
-export type AppTab = 'SCAN' | 'COLLECTION' | 'MARKET' | 'ACCOUNT';
+export interface HistoricalRecord {
+  id: string;
+  category: string;
+  name: string;
+  era: string;
+  origin: string;
+  historicalSignificance: string;
+  marketTrend: 'Bullish' | 'Bearish' | 'Stable';
+  estimatedValueRange: string;
+  rarityIndicators: string[];
+  keyCharacteristics: string[];
+  forgeryMarkers: string[];
+}
+
+export type AppTab = 'SCAN' | 'COLLECTION' | 'FINANCIAL' | 'ACCOUNT' | 'ARCHIVE';

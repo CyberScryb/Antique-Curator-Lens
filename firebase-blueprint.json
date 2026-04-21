@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about the authenticated user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the user." },
+        "displayName": { "type": "string", "description": "Display name of the user." },
+        "email": { "type": "string", "description": "Email address of the user." },
+        "photoURL": { "type": "string", "description": "URL to user's profile picture." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the profile was created." }
+      },
+      "required": ["uid", "email"]
+    },
+    "CollectionItem": {
+      "title": "Collection Item",
+      "description": "An antique item in the user's collection.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the item." },
+        "userId": { "type": "string", "description": "UID of the owner." },
+        "itemName": { "type": "string", "description": "Name of the item." },
+        "category": { "type": "string", "description": "Item category." },
+        "classification": { "type": "string", "description": "Item classification (Antique, etc)." },
+        "era": { "type": "string", "description": "Historical era." },
+        "origin": { "type": "string", "description": "Origin or maker." },
+        "condition": { "type": "string", "description": "Textual condition description." },
+        "conditionScore": { "type": "number", "description": "Numeric condition score 1-10." },
+        "rarityScore": { "type": "number", "description": "Numeric rarity score 1-10." },
+        "rarityDescription": { "type": "string", "description": "Textual rarity description." },
+        "valuation": { "type": "object", "description": "Valuation details (low, mid, high)." },
+        "authenticationMarks": { "type": "array", "description": "List of authentication marks." },
+        "visualHotspots": { "type": "array", "description": "List of visual hotspots on the item." },
+        "historicalContext": { "type": "string", "description": "Historical context analyzed by AI." },
+        "materials": { "type": "string", "description": "Materials used in the item." },
+        "careInstructions": { "type": "string", "description": "Care instructions." },
+        "comparableSales": { "type": "array", "description": "List of comparable sales data." },
+        "sellingProfile": { "type": "object", "description": "Listing strategy and venue recommendations." },
+        "forecast": { "type": "object", "description": "Financial forecast and liquidity score." },
+        "restoration": { "type": "object", "description": "Restoration potential and cost estimates." },
+        "provenance": { "type": "object", "description": "Digital hash and chain status." },
+        "dateScanned": { "type": "string", "format": "date-time", "description": "Timestamp when the item was scanned." },
+        "imageUrl": { "type": "string", "description": "Primary thumbnail URL." },
+        "images": { "type": "array", "description": "Additional image URLs." },
+        "userNotes": { "type": "string", "description": "Notes added by the user." },
+        "seller": { "type": "string", "description": "Seller information." }
+      },
+      "required": ["id", "userId", "itemName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles stored by UID."
+    },
+    "/items/{itemId}": {
+      "schema": "CollectionItem",
+      "description": "Collection items. Secured via userId equality check."
+    }
+  }
+}

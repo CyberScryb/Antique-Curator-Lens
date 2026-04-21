@@ -31,11 +31,6 @@ export const CuratorsInsight: React.FC<CuratorsInsightProps> = ({ result }) => {
           : 'bg-gradient-to-br from-amber-950/20 to-black border-amber-500/30'
         }
       `}>
-        {/* Decorative Watermark */}
-        <div className="absolute -right-6 -top-6 text-amber-500/5 pointer-events-none">
-          <Fingerprint size={120} />
-        </div>
-
         {/* Header */}
         <div className="flex items-center gap-3 mb-3 relative z-10">
           <div className={`p-2 rounded-lg ${isInsufficient ? 'bg-zinc-800 text-zinc-400' : 'bg-amber-500/10 text-amber-400'}`}>

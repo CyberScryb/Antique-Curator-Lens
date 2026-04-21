@@ -13,22 +13,26 @@ CRITICAL TASKS:
 5. **Trust Tier**: Assign a "Trust Tier" (Level 1-3) based on the visual evidence provided. 1 image = Level 1. 3+ verifiable angles = Level 3.
 `;
 
+const getAI = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
 // FULL APPRAISAL (Manual Mode)
-export const analyzeItem = async (imageBuffers: string[]): Promise<AppraisalResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+export const analyzeItem = async (imageBuffers: string[], userDescription?: string): Promise<AppraisalResult> => {
+  const ai = getAI();
   
   // Determine Trust Context based on evidence count
   const evidenceCount = imageBuffers.length;
   const prompt = `Perform a "Master Appraisal".
   EVIDENCE PROVIDED: ${evidenceCount} ANGLE(S).
+  ${userDescription ? `USER DESCRIPTION: "${userDescription}"` : ''}
   
   1. Identify the object strictly.
   2. Locate hotspots.
   3. Generate a 5-year value forecast.
   4. Provide restoration advice.
   5. Suggest 3 deep-dive questions.
-  6. **Authentication**: If ${evidenceCount} >= 3, cross-reference the Front, Reverse, and Details to validate.
-  7. **Forensic Analysis**: Act as a Senior Forensic Appraiser. Analyze metallurgical wear, tool marks, patina consistency, or hallmark placement. NO GENERAL HISTORY. If visual data is too low, state "Insufficient visual data for forensic appraisal."
+  6. **Authentication & Features**: Detail authentication marks (for Antique/Vintage) or key features (for Modern items).
+  7. **Authentication**: If ${evidenceCount} >= 3, cross-reference the Front, Reverse, and Details to validate.
+  8. **Forensic Analysis**: Act as a Senior Forensic Appraiser. Analyze metallurgical wear, tool marks, patina consistency, or hallmark placement. NO GENERAL HISTORY. If visual data is too low, state "Insufficient visual data for forensic appraisal."
   
   Return valid JSON.`;
 
@@ -69,7 +73,8 @@ export const analyzeItem = async (imageBuffers: string[]): Promise<AppraisalResu
               currency: { type: Type.STRING }
             }
           },
-          authenticationMarks: { type: Type.ARRAY, items: { type: Type.STRING } },
+          authenticationMarks: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of specific hallmarks, signatures, or age indicators (only if Antique or Vintage)." },
+          keyFeatures: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of notable design elements, hardware, or functional traits (only if Modern)." },
           visualHotspots: {
             type: Type.ARRAY,
             items: {
@@ -132,7 +137,8 @@ export const analyzeItem = async (imageBuffers: string[]): Promise<AppraisalResu
              type: Type.OBJECT,
              properties: {
                  restorationPotential: { type: Type.STRING },
-                 estimatedCost: { type: Type.STRING },
+                 estimatedCost: { type: Type.NUMBER, description: "Numeric value in USD" },
+                 recommendedActions: { type: Type.ARRAY, items: { type: Type.STRING } },
                  perfectStateDescription: { type: Type.STRING }
              }
           },
@@ -144,7 +150,7 @@ export const analyzeItem = async (imageBuffers: string[]): Promise<AppraisalResu
                   trustTier: { type: Type.STRING, enum: ["Level 1 (Snapshot)", "Level 2 (Visual)", "Level 3 (Verified)"] }
               }
           },
-          forensicInsight: { type: Type.STRING, description: "Senior Forensic Appraiser analysis of physical tells. No history." },
+          forensicInsight: { type: Type.STRING, description: "A single, insightful sentence about a specific 'tell' or market anomaly. For Antique/Vintage items with high confidence." },
           insightfulPrompts: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
@@ -173,9 +179,42 @@ export const analyzeItem = async (imageBuffers: string[]): Promise<AppraisalResu
   return result;
 };
 
-// Generates new, fresh questions for the cycle button
+export const generateRestorationPreview = async (item: AppraisalResult): Promise<string | null> => {
+    const ai = getAI();
+    try {
+        const prompt = `A highly realistic, professional museum-quality photograph of a fully restored, perfect condition ${item.era} ${item.itemName} (${item.classification}). ${item.materials}. It looks flawless, clean, and authentic to its original era. Studio lighting, white background.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-image-preview',
+            contents: {
+                parts: [
+                    { text: prompt },
+                ],
+            },
+            config: {
+                imageConfig: {
+                    aspectRatio: "1:1",
+                    imageSize: "1K"
+                }
+            }
+        });
+        
+        if (response.candidates && response.candidates[0] && response.candidates[0].content.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    const base64EncodeString: string = part.inlineData.data;
+                    return `data:image/jpeg;base64,${base64EncodeString}`;
+                }
+            }
+        }
+        return null;
+    } catch (e: any) {
+        console.error("Image generation failed", e);
+        throw new Error(e.message || "Image generation failed");
+    }
+};
 export const generateDynamicPrompts = async (item: AppraisalResult): Promise<string[]> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = getAI();
     const prompt = `
       Context: I am looking at a ${item.era} ${item.itemName} (${item.classification}).
       Existing Details: ${item.historicalContext.substring(0, 100)}...
@@ -206,7 +245,7 @@ export const generateDynamicPrompts = async (item: AppraisalResult): Promise<str
 };
 
 export const executeItemTool = async (item: AppraisalResult, toolId: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   
   let toolPrompt = "";
   if (toolId === 'LISTING_TITLE_ONLY') {
@@ -285,7 +324,7 @@ export const executeItemTool = async (item: AppraisalResult, toolId: string): Pr
 };
 
 export const analyzeLiveFrame = async (imageBuffer: string, lensMode: LensMode, previousContext?: string): Promise<LiveAnalysisUpdate> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
 
   let lensInstructions = "";
   if (lensMode === 'IDENTITY') {
@@ -302,7 +341,8 @@ export const analyzeLiveFrame = async (imageBuffer: string, lensMode: LensMode, 
   Instructions: ${lensInstructions}
   Context: ${previousContext || "None."}
   
-  Return status LOCKED only if confidence > 85%.`;
+  Return status LOCKED only if confidence > 85%.
+  If you clearly identify a potential damage area, a signature, or a maker's mark within the visual frame, set "hotspotDetected" to true.`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview', 
@@ -323,7 +363,8 @@ export const analyzeLiveFrame = async (imageBuffer: string, lensMode: LensMode, 
           quickFacts: { type: Type.ARRAY, items: { type: Type.STRING } },
           valuationEstimate: { type: Type.STRING },
           detailedNote: { type: Type.STRING },
-          confidence: { type: Type.NUMBER }
+          confidence: { type: Type.NUMBER },
+          hotspotDetected: { type: Type.BOOLEAN }
         }
       }
     }
@@ -334,7 +375,7 @@ export const analyzeLiveFrame = async (imageBuffer: string, lensMode: LensMode, 
 };
 
 export const askCurator = async (itemContext: AppraisalResult, question: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const systemContext = `
     You are the "Prime Curator", the world's most knowledgeable expert on this specific item: ${itemContext.itemName} (${itemContext.era}).
     
@@ -356,7 +397,7 @@ export const askCurator = async (itemContext: AppraisalResult, question: string)
 };
 
 export const getMarketAnalysis = async (query: string): Promise<MarketAnalysis> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `Real-time market analysis for: "${query}". JSON output.`;
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
